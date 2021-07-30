@@ -14,6 +14,15 @@ version 3 of the License, or (at your option) any later version.
 */
 
 // based on the paper: https://eprint.iacr.org/2017/1066.pdf
+#![no_std]
+#![cfg_attr(all(feature = "mesalock_sgx", not(target_env = "sgx")), no_std)]
+#![cfg_attr(all(target_env = "sgx", target_vendor = "mesalock"), feature(rustc_private))]
+
+#[cfg(all(feature = "mesalock_sgx", not(target_env = "sgx")))]
+#[macro_use]
+extern crate sgx_tstd as std;
+use std::prelude::v1::*;
+
 #[macro_use]
 extern crate serde_derive;
 extern crate serde;

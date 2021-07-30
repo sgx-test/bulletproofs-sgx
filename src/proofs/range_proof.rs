@@ -1,5 +1,5 @@
 #![allow(non_snake_case)]
-
+use std::prelude::v1::*;
 /*
 
 Copyright 2018 by Kzen Networks
