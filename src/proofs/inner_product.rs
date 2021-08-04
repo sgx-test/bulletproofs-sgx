@@ -325,7 +325,7 @@ impl InnerProductArg {
         let tot_len = points.len();
 
         let expect_P = (0..tot_len)
-            .map(|i| points[i] * &ECScalar::from(&scalars[i]))
+            .map(|i| points[i].clone() * &ECScalar::from(&scalars[i]))
             .fold(ux_c, |acc, x| acc + x as GE);
 
         if *P == expect_P {
