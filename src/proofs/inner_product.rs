@@ -15,27 +15,33 @@ version 3 of the License, or (at your option) any later version.
 @license GPL-3.0+ <https://github.com/KZen-networks/bulletproof/blob/master/LICENSE>
 */
 
+use std::ops::{Add, Mul};
 // based on the paper: https://eprint.iacr.org/2017/1066.pdf
 use curv::arithmetic::traits::*;
 use curv::cryptographic_primitives::hashing::hash_sha256::HSha256;
 use curv::cryptographic_primitives::hashing::traits::*;
 use curv::elliptic::curves::traits::*;
 use curv::BigInt;
-
-type GE = curv::elliptic::curves::secp256_k1::GE;
-type FE = curv::elliptic::curves::secp256_k1::FE;
+use serde::{Serialize, Deserialize};
 
 use Errors::{self, InnerProductError};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct InnerProductArg {
+#[serde(bound(serialize = "GE: Serialize"))]
+#[serde(bound(deserialize = "GE: Deserialize<'de>"))]
+pub struct InnerProductArg<GE> {
     pub(super) L: Vec<GE>,
     pub(super) R: Vec<GE>,
     pub(super) a_tag: BigInt,
     pub(super) b_tag: BigInt,
 }
 
-impl InnerProductArg {
+impl<GE> InnerProductArg<GE>
+where
+    GE: ECPoint + Copy + for<'a> Mul<&'a GE::Scalar, Output=GE> + for <'a> Add<&'a GE, Output=GE>,
+    for<'a> &'a GE: Mul<&'a GE::Scalar, Output=GE>,
+    GE::Scalar: ECScalar + for<'a> Mul<&'a GE::Scalar, Output=GE::Scalar> + Copy,
+{
     pub fn prove(
         G: &[GE],
         H: &[GE],
@@ -45,7 +51,7 @@ impl InnerProductArg {
         b: &[BigInt],
         mut L_vec: Vec<GE>,
         mut R_vec: Vec<GE>,
-    ) -> InnerProductArg {
+    ) -> InnerProductArg<GE> {
         let n = G.len();
 
         // All of the input vectors must have the same length.
@@ -64,18 +70,18 @@ impl InnerProductArg {
             let (G_L, G_R) = G.split_at(n);
             let (H_L, H_R) = H.split_at(n);
 
-            let c_L = inner_product(&a_L, &b_R);
-            let c_R = inner_product(&a_R, &b_L);
+            let c_L = inner_product::<GE>(&a_L, &b_R);
+            let c_R = inner_product::<GE>(&a_R, &b_L);
 
             // Note that no element in vectors a_L and b_R can be 0
             // since 0 is an invalid secret key!
             //
             // L = <a_L * G_R> + <b_R * H_L> + c_L * ux
-            let c_L_fe: FE = ECScalar::from(&c_L);
+            let c_L_fe: GE::Scalar = ECScalar::from(&c_L);
             let ux_CL: GE = ux * &c_L_fe;
             let aL_GR = G_R.iter().zip(a_L.clone()).fold(ux_CL, |acc, x| {
                 if x.1 != &BigInt::zero() {
-                    let aLi: FE = ECScalar::from(&x.1);
+                    let aLi: GE::Scalar = ECScalar::from(&x.1);
                     let aLi_GRi: GE = x.0 * &aLi;
                     acc.add_point(&aLi_GRi.get_element())
                 } else {
@@ -84,7 +90,7 @@ impl InnerProductArg {
             });
             let L = H_L.iter().zip(b_R.clone()).fold(aL_GR, |acc, x| {
                 if x.1 != &BigInt::zero() {
-                    let bRi: FE = ECScalar::from(&x.1);
+                    let bRi: GE::Scalar = ECScalar::from(&x.1);
                     let bRi_HLi: GE = x.0 * &bRi;
                     acc.add_point(&bRi_HLi.get_element())
                 } else {
@@ -96,11 +102,11 @@ impl InnerProductArg {
             // since 0 is an invalid secret key!
             //
             // R = <a_R * G_L> + <b_L * H_R> + c_R * ux
-            let c_R_fe: FE = ECScalar::from(&c_R);
+            let c_R_fe: GE::Scalar = ECScalar::from(&c_R);
             let ux_CR: GE = ux * &c_R_fe;
             let aR_GL = G_L.iter().zip(a_R.clone()).fold(ux_CR, |acc, x| {
                 if x.1 != &BigInt::zero() {
-                    let aRi: FE = ECScalar::from(&x.1);
+                    let aRi: GE::Scalar = ECScalar::from(&x.1);
                     let aRi_GLi: GE = x.0 * &aRi;
                     acc.add_point(&aRi_GLi.get_element())
                 } else {
@@ -109,7 +115,7 @@ impl InnerProductArg {
             });
             let R = H_R.iter().zip(b_L.clone()).fold(aR_GL, |acc, x| {
                 if x.1 != &BigInt::zero() {
-                    let bLi: FE = ECScalar::from(&x.1);
+                    let bLi: GE::Scalar = ECScalar::from(&x.1);
                     let bLi_HRi: GE = x.0 * &bLi;
                     acc.add_point(&bLi_HRi.get_element())
                 } else {
@@ -119,7 +125,7 @@ impl InnerProductArg {
 
             let x = HSha256::create_hash_from_ge(&[&L, &R, &ux]);
             let x_bn = x.to_big_int();
-            let order = FE::q();
+            let order = GE::Scalar::q();
             let x_inv_fe = x.invert();
 
             let a_new = (0..n)
@@ -160,7 +166,7 @@ impl InnerProductArg {
 
             L_vec.push(L);
             R_vec.push(R);
-            return InnerProductArg::prove(&G_new, &H_new, &ux, &P, &a_new, &b_new, L_vec, R_vec);
+            return InnerProductArg::<GE>::prove(&G_new, &H_new, &ux, &P, &a_new, &b_new, L_vec, R_vec);
         }
 
         InnerProductArg {
@@ -188,13 +194,13 @@ impl InnerProductArg {
 
             let x = HSha256::create_hash_from_ge(&[&self.L[0], &self.R[0], &ux]);
             let x_bn = x.to_big_int();
-            let order = FE::q();
+            let order = GE::Scalar::q();
             let x_inv_fe = x.invert();
             let x_sq_bn = BigInt::mod_mul(&x_bn, &x_bn, &order);
             let x_inv_sq_bn =
                 BigInt::mod_mul(&x_inv_fe.to_big_int(), &x_inv_fe.to_big_int(), &order);
-            let x_sq_fe: FE = ECScalar::from(&x_sq_bn);
-            let x_inv_sq_fe: FE = ECScalar::from(&x_inv_sq_bn);
+            let x_sq_fe: GE::Scalar = ECScalar::from(&x_sq_bn);
+            let x_inv_sq_fe: GE::Scalar = ECScalar::from(&x_inv_sq_bn);
 
             let G_new = (0..n)
                 .map(|i| {
@@ -225,9 +231,9 @@ impl InnerProductArg {
             return ip.verify(&G_new, &H_new, ux, &P_tag);
         }
 
-        let a_fe: FE = ECScalar::from(&self.a_tag);
-        let b_fe: FE = ECScalar::from(&self.b_tag);
-        let c = a_fe.mul(&b_fe.get_element());
+        let a_fe: GE::Scalar = ECScalar::from(&self.a_tag);
+        let b_fe: GE::Scalar = ECScalar::from(&self.b_tag);
+        let c = a_fe.mul(&b_fe);
         let Ga = &G[0] * &a_fe;
         let Hb = &H[0] * &b_fe;
         let ux_c = ux * &c;
@@ -250,7 +256,7 @@ impl InnerProductArg {
         let G = &g_vec[..];
         let H = &hi_tag[..];
         let n = G.len();
-        let order = FE::q();
+        let order = GE::Scalar::q();
 
         // All of the input vectors must have the same length.
         assert_eq!(G.len(), n);
@@ -336,14 +342,18 @@ impl InnerProductArg {
     }
 }
 
-fn inner_product(a: &[BigInt], b: &[BigInt]) -> BigInt {
+fn inner_product<GE>(a: &[BigInt], b: &[BigInt]) -> BigInt
+where
+    GE: ECPoint,
+    GE::Scalar: ECScalar,
+{
     assert_eq!(
         a.len(),
         b.len(),
         "inner_product(a,b): lengths of vectors do not match"
     );
     let out = BigInt::zero();
-    let order = FE::q();
+    let order = GE::Scalar::q();
     let out = a.iter().zip(b).fold(out, |acc, x| {
         let aibi = BigInt::mod_mul(x.0, x.1, &order);
         BigInt::mod_add(&acc, &aibi, &order)
@@ -356,12 +366,13 @@ mod tests {
     use curv::arithmetic::traits::*;
     use curv::cryptographic_primitives::hashing::hash_sha512::HSha512;
     use curv::cryptographic_primitives::hashing::traits::*;
-    use curv::elliptic::curves::secp256_k1::FE;
     use curv::elliptic::curves::secp256_k1::GE;
     use curv::elliptic::curves::traits::*;
     use curv::BigInt;
     use proofs::inner_product::InnerProductArg;
     use proofs::range_proof::generate_random_point;
+
+    type FE = curv::elliptic::curves::secp256_k1::FE;
 
     fn test_helper(n: usize) {
         let KZen: &[u8] = &[75, 90, 101, 110];
@@ -371,7 +382,7 @@ mod tests {
             .map(|i| {
                 let kzen_label_i = BigInt::from(i as u32) + &kzen_label;
                 let hash_i = HSha512::create_hash(&[&kzen_label_i]);
-                generate_random_point(&Converter::to_bytes(&hash_i))
+                generate_random_point::<GE>(&Converter::to_bytes(&hash_i))
             })
             .collect::<Vec<GE>>();
 
@@ -380,13 +391,13 @@ mod tests {
             .map(|i| {
                 let kzen_label_j = BigInt::from(n as u32) + BigInt::from(i as u32) + &kzen_label;
                 let hash_j = HSha512::create_hash(&[&kzen_label_j]);
-                generate_random_point(&Converter::to_bytes(&hash_j))
+                generate_random_point::<GE>(&Converter::to_bytes(&hash_j))
             })
             .collect::<Vec<GE>>();
 
         let label = BigInt::from(1);
         let hash = HSha512::create_hash(&[&label]);
-        let Gx = generate_random_point(&Converter::to_bytes(&hash));
+        let Gx = generate_random_point::<GE>(&Converter::to_bytes(&hash));
 
         let a: Vec<_> = (0..n)
             .map(|_| {
@@ -401,7 +412,7 @@ mod tests {
                 rand.to_big_int()
             })
             .collect();
-        let c = super::inner_product(&a, &b);
+        let c = super::inner_product::<GE>(&a, &b);
 
         let y: FE = ECScalar::new_random();
         let order = FE::q();
@@ -436,7 +447,7 @@ mod tests {
 
         let L_vec = Vec::with_capacity(n);
         let R_vec = Vec::with_capacity(n);
-        let ipp = InnerProductArg::prove(&g_vec, &hi_tag, &Gx, &P, &a, &b, L_vec, R_vec);
+        let ipp = InnerProductArg::<GE>::prove(&g_vec, &hi_tag, &Gx, &P, &a, &b, L_vec, R_vec);
         let verifier = ipp.verify(&g_vec, &hi_tag, &Gx, &P);
         assert!(verifier.is_ok())
     }
@@ -449,7 +460,7 @@ mod tests {
             .map(|i| {
                 let kzen_label_i = BigInt::from(i as u32) + &kzen_label;
                 let hash_i = HSha512::create_hash(&[&kzen_label_i]);
-                generate_random_point(&Converter::to_bytes(&hash_i))
+                generate_random_point::<GE>(&Converter::to_bytes(&hash_i))
             })
             .collect::<Vec<GE>>();
 
@@ -458,13 +469,13 @@ mod tests {
             .map(|i| {
                 let kzen_label_j = BigInt::from(n as u32) + BigInt::from(i as u32) + &kzen_label;
                 let hash_j = HSha512::create_hash(&[&kzen_label_j]);
-                generate_random_point(&Converter::to_bytes(&hash_j))
+                generate_random_point::<GE>(&Converter::to_bytes(&hash_j))
             })
             .collect::<Vec<GE>>();
 
         let label = BigInt::from(1);
         let hash = HSha512::create_hash(&[&label]);
-        let Gx = generate_random_point(&Converter::to_bytes(&hash));
+        let Gx = generate_random_point::<GE>(&Converter::to_bytes(&hash));
 
         let a: Vec<_> = (0..n)
             .map(|_| {
@@ -479,7 +490,7 @@ mod tests {
                 rand.to_big_int()
             })
             .collect();
-        let c = super::inner_product(&a, &b);
+        let c = super::inner_product::<GE>(&a, &b);
 
         let y: FE = ECScalar::new_random();
         let order = FE::q();
@@ -514,7 +525,7 @@ mod tests {
 
         let L_vec = Vec::with_capacity(n);
         let R_vec = Vec::with_capacity(n);
-        let ipp = InnerProductArg::prove(&g_vec, &hi_tag, &Gx, &P, &a, &b, L_vec, R_vec);
+        let ipp = InnerProductArg::<GE>::prove(&g_vec, &hi_tag, &Gx, &P, &a, &b, L_vec, R_vec);
         let verifier = ipp.fast_verify(&g_vec, &hi_tag, &Gx, &P);
         assert!(verifier.is_ok())
     }
@@ -527,7 +538,7 @@ mod tests {
             .map(|i| {
                 let kzen_label_i = BigInt::from(i as u32) + &kzen_label;
                 let hash_i = HSha512::create_hash(&[&kzen_label_i]);
-                generate_random_point(&Converter::to_bytes(&hash_i))
+                generate_random_point::<GE>(&Converter::to_bytes(&hash_i))
             })
             .collect::<Vec<GE>>();
 
@@ -536,15 +547,15 @@ mod tests {
             .map(|i| {
                 let kzen_label_j = BigInt::from(n as u32) + BigInt::from(i as u32) + &kzen_label;
                 let hash_j = HSha512::create_hash(&[&kzen_label_j]);
-                generate_random_point(&Converter::to_bytes(&hash_j))
+                generate_random_point::<GE>(&Converter::to_bytes(&hash_j))
             })
             .collect::<Vec<GE>>();
 
         let label = BigInt::from(1);
         let hash = HSha512::create_hash(&[&label]);
-        let Gx = generate_random_point(&Converter::to_bytes(&hash));
+        let Gx = generate_random_point::<GE>(&Converter::to_bytes(&hash));
 
-        let c = super::inner_product(&a, &b);
+        let c = super::inner_product::<GE>(&a, &b);
 
         let y: FE = ECScalar::new_random();
         let order = FE::q();
@@ -581,7 +592,7 @@ mod tests {
 
         let L_vec = Vec::with_capacity(n);
         let R_vec = Vec::with_capacity(n);
-        let ipp = InnerProductArg::prove(&g_vec, &hi_tag, &Gx, &P, &a, &b, L_vec, R_vec);
+        let ipp = InnerProductArg::<GE>::prove(&g_vec, &hi_tag, &Gx, &P, &a, &b, L_vec, R_vec);
         let verifier = ipp.verify(&g_vec, &hi_tag, &Gx, &P);
         assert!(verifier.is_ok())
     }
