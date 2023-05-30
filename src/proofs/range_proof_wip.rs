@@ -612,8 +612,8 @@ mod tests {
     use curv::elliptic::curves::traits::*;
     use curv::BigInt;
 
-    type GE = curv::elliptic::curves::secp256_k1::GE;
-    type FE = curv::elliptic::curves::secp256_k1::FE;
+    type GE = curv::elliptic::curves::starknet_curve::GE;
+    type FE = curv::elliptic::curves::starknet_curve::FE;
 
     use proofs::range_proof_wip::{RangeProofWIP, StatementRP};
 

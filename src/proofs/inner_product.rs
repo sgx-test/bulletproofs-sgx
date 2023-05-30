@@ -366,13 +366,12 @@ mod tests {
     use curv::arithmetic::traits::*;
     use curv::cryptographic_primitives::hashing::hash_sha512::HSha512;
     use curv::cryptographic_primitives::hashing::traits::*;
-    use curv::elliptic::curves::secp256_k1::GE;
+    use curv::elliptic::curves::starknet_curve::GE;
+    use curv::elliptic::curves::starknet_curve::FE;
     use curv::elliptic::curves::traits::*;
     use curv::BigInt;
     use proofs::inner_product::InnerProductArg;
     use proofs::range_proof::generate_random_point;
-
-    type FE = curv::elliptic::curves::secp256_k1::FE;
 
     fn test_helper(n: usize) {
         let KZen: &[u8] = &[75, 90, 101, 110];

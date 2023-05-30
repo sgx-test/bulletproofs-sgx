@@ -751,7 +751,8 @@ where
     GE: ECPoint,
     GE::Scalar: ECScalar,
 {
-    let result: Result<GE, _> = ECPoint::from_bytes(&bytes);
+    let x_b = BigInt::from_bytes(&bytes).modulus(&GE::Scalar::q());
+    let result: Result<GE, _> = ECPoint::from_bytes(&x_b.to_bytes());
     if result.is_ok() {
         return result.unwrap();
     } else {
@@ -770,12 +771,11 @@ mod tests {
     use curv::cryptographic_primitives::hashing::traits::*;
     use curv::elliptic::curves::traits::*;
     use curv::BigInt;
-    use curv::elliptic::curves::secp256_k1::GE;
+    use curv::elliptic::curves::starknet_curve::GE;
+    use curv::elliptic::curves::starknet_curve::FE;
 
     use proofs::range_proof::generate_random_point;
     use proofs::range_proof::RangeProof;
-
-    type FE = curv::elliptic::curves::secp256_k1::FE;
 
     pub fn test_helper(seed: &BigInt, n: usize, m: usize) {
         let nm = n * m;
