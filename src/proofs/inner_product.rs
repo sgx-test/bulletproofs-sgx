@@ -27,8 +27,6 @@ use serde::{Serialize, Deserialize};
 use Errors::{self, InnerProductError};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(bound(serialize = "GE: Serialize"))]
-#[serde(bound(deserialize = "GE: Deserialize<'de>"))]
 pub struct InnerProductArg<GE> {
     pub(super) L: Vec<GE>,
     pub(super) R: Vec<GE>,

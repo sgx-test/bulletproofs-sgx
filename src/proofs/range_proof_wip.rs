@@ -38,8 +38,6 @@ use std::ops::{Add, Mul, Shl, Shr};
 use Errors::{self, RangeProofError};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(bound(serialize = "GE: Serialize"))]
-#[serde(bound(deserialize = "GE: Deserialize<'de>"))]
 pub struct StatementRP<GE> {
     pub g_vec: Vec<GE>,
     pub h_vec: Vec<GE>,
@@ -92,8 +90,6 @@ impl<GE: ECPoint> StatementRP<GE> {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(bound(serialize = "GE: Serialize, WeightedInnerProdArg<GE>: Serialize"))]
-#[serde(bound(deserialize = "GE: Deserialize<'de>, WeightedInnerProdArg<GE>: Deserialize<'de>"))]
 pub struct RangeProofWIP<GE> {
     A: GE,
     weighted_inner_product_proof: WeightedInnerProdArg<GE>,

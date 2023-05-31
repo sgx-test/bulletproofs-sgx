@@ -30,8 +30,6 @@ use std::ops::{Add, Mul, Shl, Shr};
 use Errors::{self, RangeProofError};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(bound(serialize = "GE: Serialize, GE::Scalar: Serialize"))]
-#[serde(bound(deserialize = "GE: Deserialize<'de>, GE::Scalar: Deserialize<'de>"))]
 pub struct RangeProof<GE: ECPoint> {
     A: GE,
     S: GE,

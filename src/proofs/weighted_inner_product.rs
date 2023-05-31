@@ -35,8 +35,6 @@ use itertools::iterate;
 use Errors::{self, WeightedInnerProdError};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(bound(serialize = "GE: Serialize"))]
-#[serde(bound(deserialize = "GE: Deserialize<'de>"))]
 pub struct WeightedInnerProdArg<GE> {
     pub(super) L: Vec<GE>,
     pub(super) R: Vec<GE>,
